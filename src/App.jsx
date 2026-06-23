@@ -72,12 +72,18 @@ function App() {
   const [customIgst, setCustomIgst] = useState(null);
   const [customCgst, setCustomCgst] = useState(null);
   const [customSgst, setCustomSgst] = useState(null);
+  const [customIgstLabel, setCustomIgstLabel] = useState(null);
+  const [customCgstLabel, setCustomCgstLabel] = useState(null);
+  const [customSgstLabel, setCustomSgstLabel] = useState(null);
 
   // Reset overrides when rate or type changes
   useEffect(() => {
     setCustomIgst(null);
     setCustomCgst(null);
     setCustomSgst(null);
+    setCustomIgstLabel(null);
+    setCustomCgstLabel(null);
+    setCustomSgstLabel(null);
   }, [gstRate, taxType]);
 
   // Synchronize taxType automatic default or terms update
@@ -126,11 +132,13 @@ function App() {
     if (taxType === "IGST") {
       const autoIgst = Math.round(taxableAmount * (gstRate / 100) * 100) / 100;
       const igstAmount = customIgst !== null ? parseFloat(customIgst) || 0 : autoIgst;
+      const autoLabel = `IGST @ ${gstRate}%:`;
       taxRows.push({
-        label: `IGST @ ${gstRate}%:`,
+        label: customIgstLabel !== null ? customIgstLabel : autoLabel,
         value: igstAmount,
-        isOverride: customIgst !== null,
-        setValue: setCustomIgst
+        isOverride: customIgst !== null || customIgstLabel !== null,
+        setValue: setCustomIgst,
+        setLabel: setCustomIgstLabel
       });
       orderTotal += igstAmount;
     } else if (taxType === "CGST+SGST") {
@@ -140,17 +148,22 @@ function App() {
       const cgstAmount = customCgst !== null ? parseFloat(customCgst) || 0 : autoCgst;
       const sgstAmount = customSgst !== null ? parseFloat(customSgst) || 0 : autoSgst;
       
+      const autoCgstLabel = `CGST @ ${halfRate}%:`;
+      const autoSgstLabel = `SGST @ ${halfRate}%:`;
+      
       taxRows.push({
-        label: `CGST @ ${halfRate}%:`,
+        label: customCgstLabel !== null ? customCgstLabel : autoCgstLabel,
         value: cgstAmount,
-        isOverride: customCgst !== null,
-        setValue: setCustomCgst
+        isOverride: customCgst !== null || customCgstLabel !== null,
+        setValue: setCustomCgst,
+        setLabel: setCustomCgstLabel
       });
       taxRows.push({
-        label: `SGST @ ${halfRate}%:`,
+        label: customSgstLabel !== null ? customSgstLabel : autoSgstLabel,
         value: sgstAmount,
-        isOverride: customSgst !== null,
-        setValue: setCustomSgst
+        isOverride: customSgst !== null || customSgstLabel !== null,
+        setValue: setCustomSgst,
+        setLabel: setCustomSgstLabel
       });
       orderTotal += (cgstAmount + sgstAmount);
     }
@@ -161,7 +174,7 @@ function App() {
       orderTotal,
       amountInWords: numberToWords(orderTotal)
     };
-  }, [items, gstRate, taxType, customIgst, customCgst, customSgst]);
+  }, [items, gstRate, taxType, customIgst, customCgst, customSgst, customIgstLabel, customCgstLabel, customSgstLabel]);
 
   // Handlers
   const handleItemChange = (id, field, value) => {
@@ -229,6 +242,9 @@ function App() {
       setCustomIgst(null);
       setCustomCgst(null);
       setCustomSgst(null);
+      setCustomIgstLabel(null);
+      setCustomCgstLabel(null);
+      setCustomSgstLabel(null);
     }
   };
 
@@ -586,7 +602,26 @@ function App() {
             
             {calculations.taxRows.map((tax, i) => (
               <div className="summary-row" key={i} style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="cell-label" style={{ marginRight: 'auto' }}>{tax.label}</span>
+                <input 
+                  type="text" 
+                  className="table-input cell-label" 
+                  style={{ 
+                    marginRight: 'auto', 
+                    width: '140px',
+                    fontWeight: '700',
+                    padding: '2px 4px',
+                    borderBottom: '1px dashed var(--invoice-border)',
+                    background: 'transparent'
+                  }}
+                  value={tax.label}
+                  onChange={e => tax.setLabel(e.target.value)}
+                  onBlur={e => {
+                    if (e.target.value.trim() === '') {
+                      tax.setLabel(null);
+                    }
+                  }}
+                  placeholder="Tax Label"
+                />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>₹</span>
                   <input 
@@ -631,7 +666,10 @@ function App() {
                         borderRadius: '3px',
                         marginLeft: '2px'
                       }}
-                      onClick={() => tax.setValue(null)}
+                      onClick={() => {
+                        tax.setValue(null);
+                        tax.setLabel(null);
+                      }}
                       title="Reset to automatic calculation"
                     >
                       Auto
