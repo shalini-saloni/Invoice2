@@ -600,9 +600,15 @@ body {
 
 /* High Fidelity Print Styles */
 @media print {
+  @page {
+    margin: 0; /* Hides browser-default headers (title, date) and footers (URL, page numbers) */
+  }
+
   body {
     background-color: white;
     color: black;
+    margin: 0;
+    padding: 0;
   }
   
   .control-sidebar, 
@@ -626,7 +632,7 @@ body {
   .invoice-sheet {
     width: 100% !important;
     box-shadow: none !important;
-    padding: 0 !important;
+    padding: 20mm !important; /* Re-applies professional document padding for the physical print page */
     margin: 0 !important;
     min-height: auto !important;
     height: auto !important;
