@@ -26,15 +26,22 @@ const INITIAL_VENDOR = {
   partners: "Amit Jain / Beenu Jain"
 };
 
+const parseNumber = (val) => {
+  if (val === null || val === undefined) return 0;
+  const str = val.toString().replace(/,/g, '').trim();
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 const INITIAL_ITEMS = [
   {
     id: '1',
     partNumber: "B32529C0474J289",
     description: "TDK/EPCOS I Film Capacitor 0.47uF 630V AC I MKT Radial I Series B32529C",
     hsn: "85322900",
-    qty: 4800,
+    qty: "4,800",
     unit: "PCS",
-    rate: 5.80
+    rate: "5.80"
   }
 ];
 
@@ -60,6 +67,18 @@ function App() {
   const [gstRate, setGstRate] = useState(18);
   const [taxType, setTaxType] = useState("IGST"); // IGST, CGST+SGST, UTGST, NONE
   const [terms, setTerms] = useState(INITIAL_TERMS);
+
+  // Custom tax overrides
+  const [customIgst, setCustomIgst] = useState(null);
+  const [customCgst, setCustomCgst] = useState(null);
+  const [customSgst, setCustomSgst] = useState(null);
+
+  // Reset overrides when rate or type changes
+  useEffect(() => {
+    setCustomIgst(null);
+    setCustomCgst(null);
+    setCustomSgst(null);
+  }, [gstRate, taxType]);
 
   // Synchronize taxType automatic default or terms update
   useEffect(() => {
@@ -96,8 +115,8 @@ function App() {
   // Calculations
   const calculations = useMemo(() => {
     const taxableAmount = items.reduce((sum, item) => {
-      const qty = parseFloat(item.qty) || 0;
-      const rate = parseFloat(item.rate) || 0;
+      const qty = parseNumber(item.qty);
+      const rate = parseNumber(item.rate);
       return sum + (qty * rate);
     }, 0);
 
@@ -105,23 +124,33 @@ function App() {
     let orderTotal = taxableAmount;
 
     if (taxType === "IGST") {
-      const igstAmount = Math.round(taxableAmount * (gstRate / 100) * 100) / 100;
+      const autoIgst = Math.round(taxableAmount * (gstRate / 100) * 100) / 100;
+      const igstAmount = customIgst !== null ? parseFloat(customIgst) || 0 : autoIgst;
       taxRows.push({
         label: `IGST @ ${gstRate}%:`,
-        value: igstAmount
+        value: igstAmount,
+        isOverride: customIgst !== null,
+        setValue: setCustomIgst
       });
       orderTotal += igstAmount;
     } else if (taxType === "CGST+SGST") {
       const halfRate = gstRate / 2;
-      const cgstAmount = Math.round(taxableAmount * (halfRate / 100) * 100) / 100;
-      const sgstAmount = Math.round(taxableAmount * (halfRate / 100) * 100) / 100;
+      const autoCgst = Math.round(taxableAmount * (halfRate / 100) * 100) / 100;
+      const autoSgst = Math.round(taxableAmount * (halfRate / 100) * 100) / 100;
+      const cgstAmount = customCgst !== null ? parseFloat(customCgst) || 0 : autoCgst;
+      const sgstAmount = customSgst !== null ? parseFloat(customSgst) || 0 : autoSgst;
+      
       taxRows.push({
         label: `CGST @ ${halfRate}%:`,
-        value: cgstAmount
+        value: cgstAmount,
+        isOverride: customCgst !== null,
+        setValue: setCustomCgst
       });
       taxRows.push({
         label: `SGST @ ${halfRate}%:`,
-        value: sgstAmount
+        value: sgstAmount,
+        isOverride: customSgst !== null,
+        setValue: setCustomSgst
       });
       orderTotal += (cgstAmount + sgstAmount);
     }
@@ -132,7 +161,7 @@ function App() {
       orderTotal,
       amountInWords: numberToWords(orderTotal)
     };
-  }, [items, gstRate, taxType]);
+  }, [items, gstRate, taxType, customIgst, customCgst, customSgst]);
 
   // Handlers
   const handleItemChange = (id, field, value) => {
@@ -197,6 +226,9 @@ function App() {
       setGstRate(18);
       setTaxType("IGST");
       setTerms(INITIAL_TERMS);
+      setCustomIgst(null);
+      setCustomCgst(null);
+      setCustomSgst(null);
     }
   };
 
@@ -438,8 +470,8 @@ function App() {
             </thead>
             <tbody>
               {items.map((item, index) => {
-                const qty = parseFloat(item.qty) || 0;
-                const rate = parseFloat(item.rate) || 0;
+                const qty = parseNumber(item.qty);
+                const rate = parseNumber(item.rate);
                 const rowAmount = qty * rate;
 
                 return (
@@ -472,10 +504,21 @@ function App() {
                     </td>
                     <td style={{ verticalAlign: 'middle' }}>
                       <input 
-                        type="number" 
+                        type="text" 
                         className="table-input col-right" 
                         value={item.qty} 
                         onChange={e => handleItemChange(item.id, 'qty', e.target.value)}
+                        onFocus={e => {
+                          const raw = e.target.value.replace(/,/g, '');
+                          handleItemChange(item.id, 'qty', raw);
+                        }}
+                        onBlur={e => {
+                          const num = parseNumber(e.target.value);
+                          const formatted = num % 1 === 0 
+                            ? new Intl.NumberFormat('en-IN').format(num)
+                            : new Intl.NumberFormat('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 3 }).format(num);
+                          handleItemChange(item.id, 'qty', formatted);
+                        }}
                         placeholder="0"
                       />
                     </td>
@@ -490,11 +533,22 @@ function App() {
                     </td>
                     <td style={{ verticalAlign: 'middle' }}>
                       <input 
-                        type="number" 
-                        step="0.01"
+                        type="text" 
                         className="table-input col-right" 
                         value={item.rate} 
                         onChange={e => handleItemChange(item.id, 'rate', e.target.value)}
+                        onFocus={e => {
+                          const raw = e.target.value.replace(/,/g, '');
+                          handleItemChange(item.id, 'rate', raw);
+                        }}
+                        onBlur={e => {
+                          const num = parseNumber(e.target.value);
+                          const formatted = new Intl.NumberFormat('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          }).format(num);
+                          handleItemChange(item.id, 'rate', formatted);
+                        }}
                         placeholder="0.00"
                       />
                     </td>
@@ -531,9 +585,59 @@ function App() {
             </div>
             
             {calculations.taxRows.map((tax, i) => (
-              <div className="summary-row" key={i}>
-                <span className="cell-label">{tax.label}</span>
-                <span>₹ {formatCurrency(tax.value)}</span>
+              <div className="summary-row" key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="cell-label" style={{ marginRight: 'auto' }}>{tax.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>₹</span>
+                  <input 
+                    type="text" 
+                    className="table-input col-right" 
+                    style={{ 
+                      width: '90px', 
+                      fontWeight: tax.isOverride ? '700' : '500',
+                      color: tax.isOverride ? 'var(--primary-color)' : 'inherit',
+                      padding: '2px 4px',
+                      borderBottom: '1px dashed var(--invoice-border)'
+                    }}
+                    value={tax.isOverride ? tax.value : formatCurrency(tax.value).replace(/,/g, '')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      tax.setValue(val);
+                    }}
+                    onFocus={e => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      tax.setValue(raw);
+                    }}
+                    onBlur={e => {
+                      if (e.target.value === '') {
+                        tax.setValue(null);
+                      } else {
+                        const num = parseNumber(e.target.value);
+                        tax.setValue(num.toFixed(2));
+                      }
+                    }}
+                    placeholder="0.00"
+                  />
+                  {tax.isOverride && (
+                    <button 
+                      className="print-hide" 
+                      style={{ 
+                        border: 'none', 
+                        background: '#f1f5f9', 
+                        cursor: 'pointer', 
+                        color: '#6b7280', 
+                        fontSize: '9px',
+                        padding: '1px 3px',
+                        borderRadius: '3px',
+                        marginLeft: '2px'
+                      }}
+                      onClick={() => tax.setValue(null)}
+                      title="Reset to automatic calculation"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
 
